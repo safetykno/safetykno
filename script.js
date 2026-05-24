@@ -830,6 +830,99 @@ document.addEventListener("change",function(e){
 });
 document.addEventListener("keydown",function(e){if(e.key==="Enter"&&document.getElementById("lp").classList.contains("show"))doLogin();});
 
+// FIREBASE
+var fbDb=null,fbOnline=false;
+var FB_CONFIG={
+  apiKey:"AIzaSyAw6l1v_AKKLhMmMV4ktDk_a2EcfIHnYGw",
+  authDomain:"safetydashboard-e7e4a.firebaseapp.com",
+  databaseURL:"https://safetydashboard-e7e4a-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"safetydashboard-e7e4a",
+  storageBucket:"safetydashboard-e7e4a.firebasestorage.app",
+  messagingSenderId:"705491677638",
+  appId:"1:705491677638:web:2f10ae4e9e6747a0f242c7"
+};
+
+function setFbStatus(online,msg){
+  fbOnline=online;
+  var cls=online?"online":"offline";
+  var dots=document.querySelectorAll(".fb-dot");
+  for(var i=0;i<dots.length;i++){dots[i].className="fb-dot "+cls;}
+  var s1=document.getElementById("fbStatus"),s2=document.getElementById("fbStatus2");
+  if(s1)s1.textContent=msg;if(s2)s2.textContent=msg;
+  var syncBtn=document.getElementById("fbSync");
+  if(syncBtn)syncBtn.style.display=online?"inline-flex":"none";
+}
+
+function tryAutoFbConnect(){
+  if(typeof firebase==="undefined"){
+    setTimeout(tryAutoFbConnect,600);return;
+  }
+  try{
+    var apps=firebase.apps||[];
+    var app=apps.length?apps[0]:firebase.initializeApp(FB_CONFIG);
+    fbDb=firebase.database(app);
+    fbDb.ref(".info/connected").on("value",function(snap){
+      if(snap.val()===true){
+        setFbStatus(true,"🟢 Online — Firebase terhubung");
+        showToast("Firebase terhubung","ok");
+      } else {
+        setFbStatus(false,"🔴 Offline — data tersimpan lokal");
+      }
+    });
+  } catch(e){
+    setFbStatus(false,"Offline — "+e.message);
+  }
+}
+
+function showFbModal(){
+  // Firebase sudah hardcode — tampilkan status saja
+  showToast(fbOnline?"Firebase sudah terhubung ✓":"Mencoba koneksi Firebase...","ok");
+  if(!fbOnline)tryAutoFbConnect();
+}
+
+function fbPushAll(){
+  if(!fbDb||!fbOnline){showToast("Firebase belum terhubung","err");return;}
+  setFbStatus(true,"⏫ Mengupload...");
+  var payload={DB:DB,divisi:divisi,settings:settings};
+  fbDb.ref("safetydata").set(payload,function(err){
+    if(err){showToast("Upload gagal: "+err.message,"err");setFbStatus(true,"🟢 Online");}
+    else{showToast("Upload ke Firebase berhasil ✓","ok");setFbStatus(true,"🟢 Online — tersinkron");}
+  });
+}
+
+function fbPullAll(){
+  if(!fbDb||!fbOnline){showToast("Firebase belum terhubung","err");return;}
+  setFbStatus(true,"⏬ Mengunduh...");
+  fbDb.ref("safetydata").once("value",function(snap){
+    var data=snap.val();
+    if(!data){showToast("Belum ada data di Firebase","err");setFbStatus(true,"🟢 Online");return;}
+    if(data.DB){var k;for(k in data.DB)if(DB.hasOwnProperty(k))DB[k]=data.DB[k];}
+    if(data.divisi)divisi=data.divisi;
+    if(data.settings){settings.org=data.settings.org||settings.org;settings.lokasi=data.settings.lokasi||settings.lokasi;}
+    var i;for(i=0;i<MODS.length;i++)sDB(MODS[i]);
+    saveDivisi();updateBadges();renderPage(curPage);
+    showToast("Data berhasil ditarik dari Firebase ✓","ok");
+    setFbStatus(true,"🟢 Online — tersinkron");
+  },function(err){
+    showToast("Pull gagal: "+err.message,"err");
+    setFbStatus(true,"🟢 Online");
+  });
+}
+
+// Handle Firebase modal buttons (fbSave / fbSkip) if they exist
+document.addEventListener("click",function(e){
+  var btn=e.target.closest("#fbSave,#fbSkip,#fbCfgBtn,#fbSync");
+  if(!btn)return;
+  if(btn.id==="fbSave"||btn.id==="fbCfgBtn"||btn.id==="fbSync"){
+    document.getElementById("fbModal")&&(document.getElementById("fbModal").classList.remove("open"));
+    tryAutoFbConnect();return;
+  }
+  if(btn.id==="fbSkip"){
+    document.getElementById("fbModal")&&(document.getElementById("fbModal").classList.remove("open"));
+    return;
+  }
+});
+
 // INIT
 loadAll();
 if(tryAutoLogin())enterDashboard();
