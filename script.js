@@ -830,8 +830,8 @@ document.addEventListener("change",function(e){
 });
 document.addEventListener("keydown",function(e){if(e.key==="Enter"&&document.getElementById("lp").classList.contains("show"))doLogin();});
 
-// FIREBASE
-var fbDb=null,fbOnline=false;
+// FIREBASE REALTIME SYNC
+var fbDb=null,fbOnline=false,fbListening=false,fbLocalChange=false;
 var FB_CONFIG={
   apiKey:"AIzaSyAw6l1v_AKKLhMmMV4ktDk_a2EcfIHnYGw",
   authDomain:"safetydashboard-e7e4a.firebaseapp.com",
@@ -853,6 +853,42 @@ function setFbStatus(online,msg){
   if(syncBtn)syncBtn.style.display=online?"inline-flex":"none";
 }
 
+// AUTO PUSH — dipanggil setiap kali data disimpan lokal
+function fbAutoPush(){
+  if(!fbDb||!fbOnline)return;
+  fbLocalChange=true;
+  var payload={DB:DB,divisi:divisi,settings:settings,_ts:Date.now()};
+  fbDb.ref("safetydata").set(payload,function(err){
+    if(err)console.warn("Firebase push error:",err.message);
+    else setFbStatus(true,"🟢 Online — tersinkron "+new Date().toLocaleTimeString("id-ID"));
+    setTimeout(function(){fbLocalChange=false;},2000);
+  });
+}
+
+// AUTO LISTEN — mendengarkan perubahan dari user lain secara realtime
+function fbStartListening(){
+  if(fbListening||!fbDb)return;
+  fbListening=true;
+  fbDb.ref("safetydata").on("value",function(snap){
+    // Abaikan jika perubahan berasal dari kita sendiri
+    if(fbLocalChange)return;
+    var data=snap.val();
+    if(!data)return;
+    // Update data lokal
+    if(data.DB){var k;for(k in data.DB)if(DB.hasOwnProperty(k))DB[k]=data.DB[k];}
+    if(data.divisi)divisi=data.divisi;
+    if(data.settings){
+      settings.org=data.settings.org||settings.org;
+      settings.lokasi=data.settings.lokasi||settings.lokasi;
+    }
+    var i;for(i=0;i<MODS.length;i++)sDB(MODS[i]);
+    saveDivisi();updateBadges();renderPage(curPage);
+    setFbStatus(true,"🟢 Online — diperbarui "+new Date().toLocaleTimeString("id-ID"));
+  },function(err){
+    console.warn("Firebase listen error:",err.message);
+  });
+}
+
 function tryAutoFbConnect(){
   if(typeof firebase==="undefined"){
     setTimeout(tryAutoFbConnect,600);return;
@@ -861,12 +897,16 @@ function tryAutoFbConnect(){
     var apps=firebase.apps||[];
     var app=apps.length?apps[0]:firebase.initializeApp(FB_CONFIG);
     fbDb=firebase.database(app);
+    // Monitor koneksi
     fbDb.ref(".info/connected").on("value",function(snap){
       if(snap.val()===true){
         setFbStatus(true,"🟢 Online — Firebase terhubung");
-        showToast("Firebase terhubung","ok");
+        showToast("Firebase terhubung — realtime sync aktif","ok");
+        // Mulai dengarkan perubahan realtime
+        fbStartListening();
       } else {
         setFbStatus(false,"🔴 Offline — data tersimpan lokal");
+        fbListening=false;
       }
     });
   } catch(e){
@@ -875,21 +915,19 @@ function tryAutoFbConnect(){
 }
 
 function showFbModal(){
-  // Firebase sudah hardcode — tampilkan status saja
-  showToast(fbOnline?"Firebase sudah terhubung ✓":"Mencoba koneksi Firebase...","ok");
+  showToast(fbOnline?"Firebase terhubung — realtime sync aktif ✓":"Mencoba koneksi Firebase...","ok");
   if(!fbOnline)tryAutoFbConnect();
 }
 
+// PUSH MANUAL (tombol Upload)
 function fbPushAll(){
   if(!fbDb||!fbOnline){showToast("Firebase belum terhubung","err");return;}
   setFbStatus(true,"⏫ Mengupload...");
-  var payload={DB:DB,divisi:divisi,settings:settings};
-  fbDb.ref("safetydata").set(payload,function(err){
-    if(err){showToast("Upload gagal: "+err.message,"err");setFbStatus(true,"🟢 Online");}
-    else{showToast("Upload ke Firebase berhasil ✓","ok");setFbStatus(true,"🟢 Online — tersinkron");}
-  });
+  fbAutoPush();
+  showToast("Upload ke Firebase berhasil ✓","ok");
 }
 
+// PULL MANUAL (tombol Tarik)
 function fbPullAll(){
   if(!fbDb||!fbOnline){showToast("Firebase belum terhubung","err");return;}
   setFbStatus(true,"⏬ Mengunduh...");
@@ -905,11 +943,19 @@ function fbPullAll(){
     setFbStatus(true,"🟢 Online — tersinkron");
   },function(err){
     showToast("Pull gagal: "+err.message,"err");
-    setFbStatus(true,"🟢 Online");
   });
 }
 
-// Handle Firebase modal buttons (fbSave / fbSkip) if they exist
+// PATCH sDB agar setiap simpan lokal langsung push ke Firebase
+var _origSDB=sDB;
+sDB=function(m){
+  _origSDB(m);
+  // Debounce push: tunggu 800ms setelah simpan terakhir
+  clearTimeout(sDB._t);
+  sDB._t=setTimeout(fbAutoPush,800);
+};
+
+// Handle Firebase modal buttons
 document.addEventListener("click",function(e){
   var btn=e.target.closest("#fbSave,#fbSkip,#fbCfgBtn,#fbSync");
   if(!btn)return;
