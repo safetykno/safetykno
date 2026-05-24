@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Safety Inspector — Kualanamu</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous"></script>
+<!-- Firebase SDK -->
+<script>
+// Load Firebase SDK secara dinamis
+(function(){
+  var scripts=[
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'
+  ];
+  var loaded=0;
+  function tryInit(){
+    loaded++;
+    if(loaded===scripts.length && typeof firebase !== 'undefined'){
+      window._fbReady=true;
+      if(window._fbReadyCb) window._fbReadyCb();
+    }
+  }
+  scripts.forEach(function(src){
+    var s=document.createElement('script');
+    s.src=src;
+    s.onload=tryInit;
+    s.onerror=function(){console.warn('Firebase SDK gagal load:',src);};
+    document.head.appendChild(s);
+  });
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="lp" class="show">
+  <div class="lw">
+    <div class="ll">
+      <div class="llb">&#9992;</div>
+      <div class="lt">Safety Inspector</div>
+      <div style="font-size:11px;color:var(--cyan);font-family:var(--fm);letter-spacing:2px;margin-top:4px">PT ANGKASA PURA AVIASI</div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--fm);margin-top:2px">BANDAR UDARA KUALANAMU</div>
+    </div>
+    <div class="lcard">
+      <div class="lerr" id="lerr"><span>&#9888;</span><span id="lerrmsg">Username atau password salah.</span></div>
+      <div class="lfield"><label class="llbl">Username</label><input class="linp" id="lu" type="text" placeholder="Masukkan username..." autocomplete="username"></div>
+      <div class="lfield"><label class="llbl">Password</label>
+        <div style="position:relative">
+          <input class="linp" id="lpw" type="password" placeholder="Masukkan password..." style="padding-right:40px">
+          <button type="button" id="peye" style="position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px">&#128065;</button>
+        </div>
+      </div>
+      <button class="lbtn" id="lbtn">&#128274; Masuk</button>
+      <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--muted)">Login pertama: <span style="color:var(--cyan);font-family:var(--fm)">admin</span> / <span style="color:var(--cyan);font-family:var(--fm)">admin123</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase Config Modal -->
+<div class="overlay" id="fbModal">
+  <div class="fb-cfg">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">&#128293; Konfigurasi Firebase</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:18px">Masukkan konfigurasi Firebase project Anda. Data akan disimpan otomatis ke cloud.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label style="font-size:10px;font-family:var(--fm);color:var(--muted);text-transform:uppercase">API Key</label><input class="fb-inp" id="fbApiKey" placeholder="AIzaSy..."></div>
+      <div><label style="font-size:10px;font-family:var(--fm);color:var(--muted);text-transform:uppercase">Auth Domain</label><input class="fb-inp" id="fbAuthDomain" placeholder="project-id.firebaseapp.com"></div>
+      <div><label style="font-size:10px;font-family:var(--fm);color:var(--muted);text-transform:uppercase">Database URL</label><input class="fb-inp" id="fbDbUrl" placeholder="https://project-id-default-rtdb.firebaseio.com"></div>
+      <div><label style="font-size:10px;font-family:var(--fm);color:var(--muted);text-transform:uppercase">Project ID</label><input class="fb-inp" id="fbProjectId" placeholder="project-id"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">
+      <button class="btn btn-g btn-sm" id="fbSkip">Lewati (Offline)</button>
+      <button class="btn btn-p btn-sm" id="fbSave">&#128293; Hubungkan Firebase</button>
+    </div>
+    <div style="margin-top:12px;font-size:10px;color:var(--muted);text-align:center">
+      Belum punya Firebase? <a href="https://console.firebase.google.com" target="_blank" style="color:var(--cyan)">Buat gratis di console.firebase.google.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase Status Bar -->
+<div class="fb-bar" id="fbBar">
+  <div class="fb-dot offline" id="fbDot"></div>
+  <span id="fbStatus" style="color:var(--muted)">Offline — data tersimpan lokal</span>
+  <div style="margin-left:auto;display:flex;gap:6px">
+    <button class="btn btn-g btn-xs" id="fbSync" style="display:none">&#8635; Sync</button>
+    <button class="btn btn-g btn-xs" id="fbCfgBtn">&#9881; Firebase</button>
+  </div>
+</div>
+
+<div id="vbar" class="vbar" style="display:none">&#128065; Mode <strong>View Only</strong></div>
+  <div class="logo"><div class="logo-box">&#9992;</div><div>Safety Inspector <sub>PT ANGKASA PURA AVIASI &middot; KUALANAMU</sub></div></div>
+  <div class="nav-time" id="navTime"></div>
+  <button class="btn btn-o btn-sm" id="btnXlsAll">&#8595; Export Excel</button>
+  <div style="position:relative" id="ubwrap">
+    <div class="ubadge" id="ubadge">
+      <div class="uav" id="uav" style="background:var(--blue)">A</div>
+      <div><div style="font-size:12px;font-weight:500;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="uname">Admin</div><div style="font-size:9px;font-family:var(--fm);color:var(--muted)" id="urole">ADMINISTRATOR</div></div>
+      <span style="font-size:10px;color:var(--muted)">&#9662;</span>
+    </div>
+    <div class="umenu" id="umenu" style="display:none">
+      <div class="umi" id="mProfil">&#128100; Profil Saya</div>
+      <div class="umisep"></div>
+      <div class="umi admin-only" id="mKelola">&#9881; Kelola Pengguna</div>
+      <div class="umisep admin-only"></div>
+      <div class="umi" id="mLogout" style="color:var(--red)">&#128682; Keluar</div>
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+<nav class="sidebar">
+  <div class="nav-item active" data-page="overview"><span class="ni">&#128202;</span>Overview</div>
+  <div class="sb-sec">Modul Safety</div>
+  <div class="nav-item" data-page="inspeksi"><span class="ni">&#128269;</span>Inspeksi<span class="nb" id="nb-inspeksi">0</span></div>
+  <div class="nav-item" data-page="audit"><span class="ni">&#128203;</span>Audit<span class="nb" id="nb-audit">0</span></div>
+  <div class="nav-item" data-page="birdstrike"><span class="ni">&#128038;</span>Bird Strike<span class="nb" id="nb-birdstrike">0</span></div>
+  <div class="nav-item" data-page="kecelakaan"><span class="ni">&#9937;</span>Kecelakaan Kerja<span class="nb" id="nb-kecelakaan">0</span></div>
+  <div class="nav-item" data-page="lingkungan"><span class="ni">&#127807;</span>Lingkungan Kerja</div>
+  <div class="sb-sec">Monitoring</div>
+  <div class="nav-item" data-page="kpi"><span class="ni">&#127919;</span>Safety KPI</div>
+  <div class="nav-item" data-page="spi"><span class="ni">&#128200;</span>SPI Kualanamu</div>
+  <div class="nav-item" data-page="risk"><span class="ni">&#9888;</span>Risk Register</div>
+  <div class="nav-item" data-page="training"><span class="ni">&#127891;</span>Training Safety</div>
+  <div class="nav-item" data-page="hazard"><span class="ni">&#9889;</span>Hazard / Near Miss</div>
+  <div class="sb-sec">Dokumen</div>
+  <div class="nav-item" data-page="regulasi"><span class="ni">&#128220;</span>Regulasi &amp; Aturan</div>
+  <div class="sb-sec">Sistem</div>
+  <div class="nav-item admin-only" data-page="usermgmt"><span class="ni">&#128101;</span>Kelola Pengguna</div>
+  <div class="nav-item" data-page="settings"><span class="ni">&#9881;</span>Pengaturan</div>
+</nav>
+
+<div class="content" id="content">
+
+<div id="page-overview">
+  <div class="ph"><div><div class="pt">&#128202; Overview</div><div class="ps">Dashboard Safety Inspector</div></div>
+    <div class="pa">
+      <select class="fi" style="width:110px" id="ovYear"><option value="all">Semua Tahun</option></select>
+      <select class="fi" style="width:130px" id="ovMonth"><option value="all">Semua Bulan</option>
+        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+        <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+        <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+      </select>
+    </div>
+  </div>
+  <div id="ovKpi" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
+  <div class="g3">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Inspeksi Bulanan</div></div><div class="cw"><canvas id="cOvI"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Kecelakaan &amp; Birdstrike</div></div><div class="cw"><canvas id="cOvK"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--orange)"></span>Status Temuan (Inspeksi+Audit)</div></div><div class="cw" style="height:160px"><canvas id="cOvCA"></canvas></div><div class="leg" id="legOvCA"></div></div>
+  </div>
+  <div class="g3">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--yellow)"></span>Audit Level</div></div><div class="cw" style="height:160px"><canvas id="cOvAu"></canvas></div><div class="leg" id="legOvAu"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--green)"></span>Training</div></div><div class="cw" style="height:160px"><canvas id="cOvTr"></canvas></div><div class="leg" id="legOvTr"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--purple)"></span>Risk Level</div></div><div class="cw" style="height:160px"><canvas id="cOvRi"></canvas></div><div class="leg" id="legOvRi"></div></div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Ranking Overdue per Unit Kerja</div><span style="font-size:10px;font-family:var(--fm);color:var(--muted)">Inspeksi + Audit</span></div>
+      <div class="cw" style="height:220px"><canvas id="cOvOD"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Detail Overdue per Unit</div></div>
+      <div id="ovODList" style="max-height:220px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<div id="page-inspeksi" style="display:none">
+  <div class="ph"><div><div class="pt">&#128269; Inspeksi</div><div class="ps">Data kegiatan inspeksi safety</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="inspeksi">&#65291; Input Inspeksi</button></div></div>
+  <div class="g4" id="kpiInspeksi"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Tren Bulanan</div></div><div class="cw"><canvas id="cInspT"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--yellow)"></span>Status</div></div><div class="cw"><canvas id="cInspS"></canvas></div><div class="leg" id="legInspS"></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Inspeksi</span>
+      <input type="text" class="tts" id="srInspeksi" placeholder="Cari...">
+      <select class="tts" id="sortInspeksi" style="width:130px"><option value="">Default</option><option value="unitKerja">Unit</option><option value="tanggal_desc">Terbaru</option><option value="status">Status</option></select>
+      <div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="inspeksi">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufInspeksi"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Lokasi</th><th>Unit</th><th>Jenis</th><th>Temuan</th><th>Severity</th><th>PIC</th><th>Deadline</th><th>Status</th><th>Ev.Sebelum</th><th>Ev.Sesudah</th><th>Aksi</th></tr></thead><tbody id="tbInspeksi"></tbody></table></div>
+    <div class="pag" id="pgInspeksi"></div>
+  </div>
+</div>
+
+<div id="page-audit" style="display:none">
+  <div class="ph"><div><div class="pt">&#128203; Audit</div><div class="ps">Monitoring temuan audit</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="audit">&#65291; Input Audit</button></div></div>
+  <div class="g4" id="kpiAudit"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Temuan per Level</div></div><div class="cw"><canvas id="cAuL"></canvas></div><div class="leg" id="legAuL"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Tren Bulanan</div></div><div class="cw"><canvas id="cAuT"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Audit</span>
+      <input type="text" class="tts" id="srAudit" placeholder="Cari...">
+      <select class="tts" id="sortAudit" style="width:130px"><option value="">Default</option><option value="divisi">Unit</option><option value="tanggalAudit_desc">Terbaru</option></select>
+      <div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="audit">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufAudit"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Jenis</th><th>Auditor</th><th>Divisi</th><th>Finding</th><th>Level</th><th>CA</th><th>Deadline</th><th>Status</th><th>Ev.Sebelum</th><th>Ev.Sesudah</th><th>Aksi</th></tr></thead><tbody id="tbAudit"></tbody></table></div>
+    <div class="pag" id="pgAudit"></div>
+  </div>
+</div>
+
+<div id="page-birdstrike" style="display:none">
+  <div class="ph"><div><div class="pt">&#128038; Bird Strike</div><div class="ps">Monitoring kejadian bird strike</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="birdstrike">&#65291; Input Bird Strike</button></div></div>
+  <div class="g4" id="kpiBirdstrike"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--orange)"></span>Tren Bulanan</div></div><div class="cw"><canvas id="cBsT"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--yellow)"></span>Severity</div></div><div class="cw"><canvas id="cBsS"></canvas></div><div class="leg" id="legBsS"></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Bird Strike</span><input type="text" class="tts" id="srBirdstrike" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="birdstrike">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufBirdstrike"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Waktu</th><th>Lokasi</th><th>Jenis Burung</th><th>Jml</th><th>Severity</th><th>Dampak</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tbBirdstrike"></tbody></table></div>
+    <div class="pag" id="pgBirdstrike"></div>
+  </div>
+</div>
+
+<div id="page-kecelakaan" style="display:none">
+  <div class="ph"><div><div class="pt">&#9937; Kecelakaan Kerja</div><div class="ps">Monitoring insiden</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="kecelakaan">&#65291; Input Kecelakaan</button></div></div>
+  <div class="g4" id="kpiKecelakaan"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Tren Bulanan</div></div><div class="cw"><canvas id="cKecT"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--orange)"></span>Per Divisi</div></div><div class="cw"><canvas id="cKecD"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Kecelakaan</span><input type="text" class="tts" id="srKecelakaan" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="kecelakaan">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufKecelakaan"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Nama</th><th>Divisi</th><th>Lokasi</th><th>Jenis</th><th>Cedera</th><th>LTI</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tbKecelakaan"></tbody></table></div>
+    <div class="pag" id="pgKecelakaan"></div>
+  </div>
+</div>
+
+<div id="page-lingkungan" style="display:none">
+  <div class="ph"><div><div class="pt">&#127807; Lingkungan Kerja</div><div class="ps">Monitoring parameter lingkungan</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="lingkungan">&#65291; Input Monitoring</button></div></div>
+  <div class="g4" id="kpiLingkungan"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--green)"></span>Status Kepatuhan</div></div><div class="cw"><canvas id="cLingS"></canvas></div><div class="leg" id="legLingS"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Per Parameter</div></div><div class="cw"><canvas id="cLingT"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Lingkungan</span><input type="text" class="tts" id="srLingkungan" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="lingkungan">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufLingkungan"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Area</th><th>Parameter</th><th>Hasil</th><th>NAB</th><th>Status</th><th>Tindakan</th><th>Aksi</th></tr></thead><tbody id="tbLingkungan"></tbody></table></div>
+    <div class="pag" id="pgLingkungan"></div>
+  </div>
+</div>
+
+<div id="page-kpi" style="display:none">
+  <div class="ph"><div><div class="pt">&#127919; Safety KPI</div><div class="ps">Safety Performance Indicator</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="kpi">&#65291; Input KPI</button></div></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>KPI Achievement</div></div><div id="kpiProgress"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--green)"></span>Target vs Aktual</div></div><div class="cw"><canvas id="cKpiB"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data KPI</span><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="kpi">&#8595; Excel</button></div>
+    <div class="tw h240"><table><thead><tr><th>No</th><th>KPI</th><th>Target</th><th>Aktual</th><th>Satuan</th><th>Status</th><th>Trend</th><th>Aksi</th></tr></thead><tbody id="tbKpi"></tbody></table></div>
+  </div>
+</div>
+
+<div id="page-spi" style="display:none">
+  <div class="ph"><div><div class="pt">&#128200; SPI Kualanamu</div><div class="ps">Safety Performance Indicator</div></div>
+    <div class="pa">
+      <select class="fi" style="width:130px" id="spiMonth"><option value="all">Semua Bulan</option>
+        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+        <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+        <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+      </select>
+      <select class="fi" style="width:110px" id="spiYear"><option value="all">Semua Tahun</option></select>
+      <button class="btn btn-s btn-sm admin-only" data-modal="spi">&#65291; Input SPI</button>
+      <button class="btn btn-o btn-sm" data-export="spi">&#8595; Excel</button>
+    </div>
+  </div>
+  <div id="spiKpiRow" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
+  <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#ff3355"></span>Leading — Runway Excursion</div></div>
+    <div class="g3">
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">MARKA RUNWAY (%)</div><div class="cw" style="height:155px"><canvas id="cSpiMk"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">GRF REPORTING (%)</div><div class="cw" style="height:155px"><canvas id="cSpiGf"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">KEKESATAN RUNWAY (%)</div><div class="cw" style="height:155px"><canvas id="cSpiKk"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#ff8f3c"></span>Leading — Runway Incursion</div></div>
+    <div class="g3">
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">KEPATUHAN GSE (%)</div><div class="cw" style="height:155px"><canvas id="cSpiGs"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">ALAT BANTU VISUAL (%)</div><div class="cw" style="height:155px"><canvas id="cSpiVs"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">KOMUNIKASI SISI UDARA (%)</div><div class="cw" style="height:155px"><canvas id="cSpiKm"></canvas></div></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#ffd060"></span>Leading — Ground Collision</div></div><div class="cw" style="height:160px"><canvas id="cSpiGc"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#a78bfa"></span>Leading — FOD Incident</div></div><div class="cw" style="height:160px"><canvas id="cSpiFd"></canvas></div></div>
+  </div>
+  <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#00e096"></span>Leading — Birdstrike</div></div>
+    <div class="g2">
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">PEMOTONGAN RUMPUT (%)</div><div class="cw" style="height:155px"><canvas id="cSpiRm"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">INSPEKSI WILDLIFE (%)</div><div class="cw" style="height:155px"><canvas id="cSpiWl"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Nilai SPI Gabungan</div></div><div class="cw" style="height:200px"><canvas id="cSpiGab"></canvas></div><div class="leg" id="legSpiGab"></div></div>
+  <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:#ff3355"></span>Lagging Indicator</div></div>
+    <div class="g2">
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">RUNWAY EXCURSION (Kejadian)</div><div class="cw" style="height:155px"><canvas id="cSpiLre"></canvas></div></div>
+      <div><div style="font-size:10px;font-family:var(--fm);color:var(--muted);margin-bottom:6px">RUNWAY INCURSION CAT A&amp;B</div><div class="cw" style="height:155px"><canvas id="cSpiLri"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data SPI Bulanan</span><input type="text" class="tts" id="srSpi" placeholder="Cari..."><div style="flex:1"></div></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Bulan</th><th>Tahun</th><th>Marka%</th><th>GRF%</th><th>Kekes%</th><th>GSE%</th><th>Visual%</th><th>Komun%</th><th>TL%</th><th>Briefing%</th><th>FOD</th><th>Rumput%</th><th>Wildlife%</th><th>RE</th><th>RI</th><th>Kategori</th><th>Aksi</th></tr></thead><tbody id="tbSpi"></tbody></table></div>
+    <div class="pag" id="pgSpi"></div>
+  </div>
+</div>
+
+<div id="page-risk" style="display:none">
+  <div class="ph"><div><div class="pt">&#9888; Risk Register — HIRADC</div><div class="ps">Identifikasi Bahaya, Penilaian &amp; Pengendalian Risiko</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="risk">&#65291; Input HIRADC</button></div></div>
+  <div class="g4" id="kpiRisk"></div>
+  <div class="card">
+    <div class="ct"><div class="ctl"><span class="dot" style="background:var(--red)"></span>Matriks Risiko ICAO</div></div>
+    <div style="overflow-x:auto"><table style="min-width:500px;border-collapse:collapse;font-size:11px;text-align:center" id="riskMatrixTbl"></table></div>
+    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+      <div class="li"><div class="ld" style="background:#ff3355"></div>Extreme</div>
+      <div class="li"><div class="ld" style="background:#ffd060"></div>Medium / ALARP</div>
+      <div class="li"><div class="ld" style="background:#00e096"></div>Low / Acceptable</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data HIRADC</span><input type="text" class="tts" id="srRisk" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="risk">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufRisk"></div>
+    <div class="tw h300">
+      <table style="min-width:1200px">
+        <thead>
+          <tr>
+            <th rowspan="2" style="text-align:center">No</th>
+            <th colspan="6" style="text-align:center;background:rgba(26,114,232,.2)">1. IDENTIFIKASI BAHAYA</th>
+            <th colspan="3" style="text-align:center;background:rgba(255,143,60,.2)">2. PENILAIAN RISIKO</th>
+            <th rowspan="2" style="background:rgba(167,139,250,.1)">Rekomendasi Pengendalian</th>
+            <th colspan="3" style="text-align:center;background:rgba(0,224,150,.2)">3. RISIKO TERSISA</th>
+            <th rowspan="2">PIC</th><th rowspan="2">Status</th><th rowspan="2">Aksi</th>
+          </tr>
+          <tr>
+            <th style="background:rgba(26,114,232,.1)">Lokasi/Proses</th>
+            <th style="background:rgba(26,114,232,.1)">Bahaya</th>
+            <th style="background:rgba(26,114,232,.1)">N/R</th>
+            <th style="background:rgba(26,114,232,.1)">Dasar Hukum</th>
+            <th style="background:rgba(26,114,232,.1)">Penyebab</th>
+            <th style="background:rgba(26,114,232,.1)">Risiko/Dampak</th>
+            <th style="background:rgba(255,143,60,.1)">K</th>
+            <th style="background:rgba(255,143,60,.1)">D</th>
+            <th style="background:rgba(255,143,60,.1)">Tingkat</th>
+            <th style="background:rgba(0,224,150,.1)">K</th>
+            <th style="background:rgba(0,224,150,.1)">D</th>
+            <th style="background:rgba(0,224,150,.1)">Tingkat</th>
+          </tr>
+        </thead>
+        <tbody id="tbRisk"></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pgRisk"></div>
+  </div>
+</div>
+
+<div id="page-training" style="display:none">
+  <div class="ph"><div><div class="pt">&#127891; Training Safety</div><div class="ps">Monitoring pelaksanaan training</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="training">&#65291; Input Training</button></div></div>
+  <div class="g4" id="kpiTraining"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--green)"></span>Completion Rate</div></div><div id="trainingProgress"></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--blue2)"></span>Target vs Realisasi</div></div><div class="cw"><canvas id="cTrB"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Training</span><input type="text" class="tts" id="srTraining" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="training">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufTraining"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Nama Training</th><th>Divisi</th><th>Peserta</th><th>Target</th><th>Realisasi</th><th>Completion</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tbTraining"></tbody></table></div>
+    <div class="pag" id="pgTraining"></div>
+  </div>
+</div>
+
+<div id="page-hazard" style="display:none">
+  <div class="ph"><div><div class="pt">&#9889; Hazard / Near Miss</div><div class="ps">Pelaporan bahaya</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="hazard">&#65291; Input Hazard</button></div></div>
+  <div class="g4" id="kpiHazard"></div>
+  <div class="g2">
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--yellow)"></span>Tren Bulanan</div></div><div class="cw"><canvas id="cHazT"></canvas></div></div>
+    <div class="card"><div class="ct"><div class="ctl"><span class="dot" style="background:var(--purple)"></span>Status</div></div><div class="cw" style="height:160px"><canvas id="cHazS"></canvas></div><div class="leg" id="legHazS"></div></div>
+  </div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Data Hazard</span><input type="text" class="tts" id="srHazard" placeholder="Cari..."><div style="flex:1"></div><button class="btn btn-o btn-sm" data-export="hazard">&#8595; Excel</button></div>
+    <div class="ufbar" id="ufHazard"></div>
+    <div class="tw h300"><table><thead><tr><th>No</th><th>Tanggal</th><th>Pelapor</th><th>Lokasi</th><th>Hazard</th><th>Risiko</th><th>Tindakan</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tbHazard"></tbody></table></div>
+    <div class="pag" id="pgHazard"></div>
+  </div>
+</div>
+
+<div id="page-regulasi" style="display:none">
+  <div class="ph"><div><div class="pt">&#128220; Regulasi &amp; Aturan</div><div class="ps">Dokumen regulasi dan SOP</div></div><div class="pa"><button class="btn btn-s btn-sm admin-only" data-modal="regulasi">&#65291; Tambah Regulasi</button></div></div>
+  <div class="rsw"><span class="rsw-ic">&#128269;</span><input class="regsrch" id="srRegulasi" placeholder="Cari regulasi..."></div>
+  <div class="regcats" id="regCatBar"></div>
+  <div class="g4" id="kpiRegulasi"></div>
+  <div class="reggrid" id="regGrid"></div>
+</div>
+
+<div id="page-usermgmt" style="display:none">
+  <div class="ph"><div><div class="pt">&#128101; Kelola Pengguna</div><div class="ps">Tambah, edit, dan kelola akses</div></div><div class="pa"><button class="btn btn-s btn-sm" id="btnAddUser">&#65291; Tambah Pengguna</button></div></div>
+  <div id="kpiUsers" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"></div>
+  <div class="card">
+    <div class="ttb"><span style="font-size:13px;font-weight:600">Daftar Pengguna</span><input type="text" class="tts" id="srUsers" placeholder="Cari..."><div style="flex:1"></div></div>
+    <div class="tw h300"><table class="utbl"><thead><tr><th>No</th><th>Username</th><th>Nama</th><th>Email</th><th>Role</th><th>Dibuat</th><th>Login Terakhir</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tbUsers"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="ct"><div class="ctl"><span class="dot" style="background:var(--muted)"></span>Log Aktivitas</div><button class="btn btn-g btn-xs" id="btnClearLog">&#128465; Hapus Log</button></div>
+    <div class="tw h240"><table><thead><tr><th>Waktu</th><th>Username</th><th>Aksi</th><th>Status</th></tr></thead><tbody id="tbActivity"></tbody></table></div>
+  </div>
+</div>
+
+<div id="page-settings" style="display:none">
+  <div class="ph"><div><div class="pt">&#9881; Pengaturan</div><div class="ps">Konfigurasi sistem</div></div></div>
+  <div class="g2">
+    <div class="card">
+      <div class="ct"><div class="ctl">&#127970; Divisi / Unit Kerja</div></div>
+      <div id="divisiList"></div>
+      <div style="display:flex;gap:7px;margin-top:10px"><input class="fi" id="newDivisi" placeholder="Nama divisi baru..." style="flex:1"><button class="btn btn-p btn-sm" id="btnAddDivisi">&#65291; Tambah</button></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="card">
+        <div class="ct"><div class="ctl">&#9881; Umum</div></div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="fg"><label class="fl">Nama Organisasi</label><input class="fi" id="settingOrg"></div>
+          <div class="fg"><label class="fl">Lokasi / Bandara</label><input class="fi" id="settingLokasi"></div>
+          <button class="btn btn-p btn-sm" style="width:fit-content" id="btnSaveSetting">&#128190; Simpan</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct"><div class="ctl">&#128452; Data &amp; Sinkronisasi</div></div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:11px;color:var(--muted)">Total: <strong id="totalRecords">0</strong> records</div>
+          <!-- Status Firebase -->
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;align-items:center;gap:8px">
+            <div class="fb-dot offline" id="fbDot2"></div>
+            <span id="fbStatus2" style="font-size:11px;color:var(--muted);flex:1">Offline</span>
+            <button class="btn btn-p btn-xs" id="fbCfgBtn2">&#9881; Firebase</button>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">Cloud (Firebase)</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-p btn-sm" id="btnFbPush">&#9650; Upload ke Firebase</button>
+            <button class="btn btn-o btn-sm" id="btnFbPull">&#9660; Tarik dari Firebase</button>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">Lokal</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-o btn-sm" id="btnXlsAll2">&#8595; Export Excel</button>
+            <button class="btn btn-o btn-sm" id="btnBackup">&#8595; Backup JSON</button>
+            <label class="btn btn-o btn-sm" style="cursor:pointer">&#8593; Import JSON<input type="file" accept=".json" style="display:none" id="importFile"></label>
+          </div>
+          <button class="btn btn-d btn-sm" style="width:fit-content" id="btnClearAll">&#128465; Hapus Semua Data</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div></div>
+
+<div class="toast" id="toast"><span id="tico">&#10003;</span> <span id="tmsg"></span></div>
+
+<div class="overlay" id="mainModal">
+  <div class="modal">
+    <div class="mh"><div class="mt2" id="modalTitle">Input Data</div><button class="mc" id="btnCloseModal">&#10005;</button></div>
+    <div class="mb" id="modalBody"></div>
+    <div class="mf"><button class="btn btn-g btn-sm" id="btnCancelModal">Batal</button><button class="btn btn-p btn-sm" id="btnSaveModal">&#128190; Simpan</button></div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
